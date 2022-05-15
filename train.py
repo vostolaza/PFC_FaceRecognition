@@ -31,16 +31,32 @@ def generate_C1(path):
 
 
 def chooseDirectory(vis, subject_path):
-    subject_id = int(subject_path.split('/')[-1])
+    subject_id = int(subject_path.split("/")[-1])
 
-    base_path = '/'.join(subject_path.split('/')[:-4])
-
-    while (idx := rd.randint(1, 1209)) in vis and idx != subject_id:
+    base_path = "/".join(subject_path.split("/")[:-4])
+    idx = None
+    while True:
         idx = rd.randint(1, 1209)
+        if idx in vis or idx == subject_id:
+            continue
+        p = base_path + (
+            "/gray_feret_cd1/data/images/"
+            if idx < 700
+            else "/gray_feret_cd2/data/images/"
+        )
+        p += str(idx).zfill(5)
+
+        if not os.path.exists(p):
+            continue
+        break
+
     vis.add(idx)
-    dir = base_path + ("/gray_feret_cd1/data/images/" if idx < 700 else "/gray_feret_cd2/data/images/")
+    dir = base_path + (
+        "/gray_feret_cd1/data/images/" if idx < 700 else "/gray_feret_cd2/data/images/"
+    )
     dir += str(idx).zfill(5)
     return dir
+
 
 def C2_helper(subject_path, ti):
     visited = set()
@@ -82,7 +98,7 @@ def generate_PCA(dataset):
 
 def train(path):
     """
-    path: directory with photos of a single subject 
+    path: directory with photos of a single subject
     """
 
     print("Generating C1...")
@@ -120,8 +136,9 @@ def train(path):
 
     return clf
 
+
 def predict(ID, photo):
-    with open("svms/" + ID + ".pkl", 'rb') as f: 
+    with open("svms/" + ID + ".pkl", "rb") as f:
         svm = pickle.load(f)
     photo = get_image(photo)
     photo = photo.reshape(1, -1)
@@ -129,10 +146,12 @@ def predict(ID, photo):
 
     return y_pred
 
+
 def save_svm(svm, path):
-    with open("svms/" + path + ".pkl", 'wb') as f: 
+    with open("svms/" + path + ".pkl", "wb") as f:
         pickle.dump(svm, f)
     print("Saved SVM to svms/" + path + ".pkl")
+
 
 if __name__ == "__main__":
     basePath = "colorferet/dvd2/"

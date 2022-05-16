@@ -1,7 +1,7 @@
 import numpy as np
 import random as rd
+import pandas as pd
 import os
-import shutil
 import time
 import pickle
 
@@ -10,6 +10,7 @@ from sklearn import svm
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from sklearn.neighbors import KNeighborsClassifier
 
 N_SAMPLES = 10
 
@@ -80,30 +81,9 @@ def generate_C2(subject_path):
     return vectors
 
 
-def generate_PCA(dataset):
-    train_img, test_img, train_lbl, test_lbl = train_test_split(
-        dataset.data, dataset.imgname, test_size=0.2, random_state=0
-    )
-    scaler = StandardScaler()
-    scaler.fit(train_img)
-    train_img = scaler.transform(train_img)
-    test_img = scaler.transform(test_img)
-
-    pca = PCA(0.95)  # mantener 95% de varianza en el dataset, pca elige el n_components
-    pca.fit(train_img)
-    train_img = pca.transform(train_img)
-    test_img = pca.transform(test_img)
-    # ya se redujo la dimensionalidad
-
-
-def train(path):
-    """
-    path: directory with photos of a single subject
-    """
-
+def generate_dataset(path):
     print("Generating C1...")
     start = time.time()
-
     """ 
     C1: difference space for photos of the same subject
     """
@@ -113,7 +93,6 @@ def train(path):
 
     print("Generating C2...")
     start = time.time()
-
     """
     C2: difference space for photos of the subject vs the other subjects
     """
@@ -126,7 +105,14 @@ def train(path):
     X = np.array(C1 + C2)
     X = X.reshape(len(X), -1)
     y = np.array([1] * len(C1) + [0] * len(C2))
+    return X, y
 
+
+def train_svm(path):
+    """
+    path: directory with photos of a single subject
+    """
+    X, y = generate_dataset(path)
     clf = svm.SVC(kernel="linear", C=1)
     print("Fitting...")
     start = time.time()
@@ -135,6 +121,21 @@ def train(path):
     print("Fitted in {} seconds".format(end - start))
 
     return clf
+
+
+def train_knn_pca(path):
+    X, y = generate_dataset(path)
+    scaler = StandardScaler()
+    scaler.fit(X)
+    X = scaler.transform(X)
+
+    pca = PCA(0.95)  # mantener 95% de varianza en el dataset, pca elige el n_components
+    pca.fit(X)
+    X = pca.transform(X)
+    # ya se redujo la dimensionalidad
+    knn = KNeighborsClassifier(n_neighbors=10)
+    knn.fit(X, y)
+    return knn
 
 
 def predict(ID, photo):
@@ -147,18 +148,32 @@ def predict(ID, photo):
     return y_pred
 
 
-def save_svm(svm, path):
-    with open("svms/" + path + ".pkl", "wb") as f:
-        pickle.dump(svm, f)
-    print("Saved SVM to svms/" + path + ".pkl")
+def save_obj(obj, path):
+    with open(path + ".pkl", "wb") as f:
+        pickle.dump(obj, f)
+    print("Saved Object to " + path + ".pkl")
 
 
 if __name__ == "__main__":
     basePath = "colorferet/dvd2/"
-
+    """
+    Train SVMs
+    
     for cd in [1, 2]:
         for dir in os.listdir(basePath + f"gray_feret_cd{cd}/data/images"):
             print("Training on {}".format(dir))
-            single_svm = train(basePath + f"gray_feret_cd{cd}/data/images/" + dir)
-            save_svm(single_svm, dir)
+            single_svm = train_svm(basePath + f"gray_feret_cd{cd}/data/images/" + dir)
+            save_svm(single_svm, "svms/" + dir)
             del single_svm
+    """
+    """
+    Train KNN - PCAs
+    """
+    for cd in [1, 2]:
+        for dir in os.listdir(basePath + f"gray_feret_cd{cd}/data/images"):
+            print("Training on {}".format(dir))
+            single_knn_pca = train_knn_pca(
+                basePath + f"gray_feret_cd{cd}/data/images/" + dir
+            )
+            save_obj(single_knn_pca, "knn_pcas/" + dir)
+            del single_knn_pca

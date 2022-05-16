@@ -2,26 +2,10 @@ import os
 import shutil
 import json
 
+# import utils
+
 from random import randint, choice, sample
 from imageio import imread
-
-
-def get_test_subjects(test_size=0.1):
-    dirs = ["dvd1/data/images", "dvd2/data/images"]
-    individuals = {dirs[0]: os.listdir(dirs[0]), dirs[1]: os.listdir(dirs[1])}
-    n_total = len(os.listdir(dirs[0])) + len(os.listdir(dirs[1]))
-    test_size = int(n_total * test_size)
-
-    chosen_individuals = []
-
-    while test_size > 0:
-        chosen_dir = choice(dirs)
-        chosen_individual = choice(individuals[chosen_dir])
-        chosen_individuals.append(chosen_dir + "/" + chosen_individual)
-        individuals[chosen_dir].remove(chosen_individual)
-        test_size -= 1
-
-    return chosen_individuals
 
 
 def clear_folder(folder):
@@ -37,8 +21,11 @@ def clear_folder(folder):
 
 
 if __name__ == "__main__":
+    basePath = "colorferet/dvd2/"
 
-    individuals = get_test_subjects()
+    # individuals = utils.get_train_test_subjects(basePath)
+    with open("train_subjects.json") as f:
+        individuals = json.loads(f)
     test_set = {individual: None for individual in individuals}
 
     clear_folder("test_set/")
@@ -46,12 +33,12 @@ if __name__ == "__main__":
     for individual in individuals:
         individual_code = individual.split("/")[-1]
         os.mkdir("test_set/" + individual_code)
-        imgs = [img for img in os.listdir(individual) if img.endswith("ppm")]
+        imgs = [img for img in os.listdir(individual) if img.endswith(".tif")]
         sampled_images = sample(imgs, 2)
 
         for img in sampled_images:
             img_path = individual + "/" + img
-            shutil.move(img_path, "test_set/" + individual_code + "/")
+            # shutil.move(img_path, "test_set/" + individual_code + "/")
 
         test_set[individual] = sampled_images
 

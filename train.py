@@ -4,7 +4,7 @@ import pandas as pd
 import os
 import time
 import pickle
-
+import utils
 from imageio import imread
 from sklearn import svm
 from sklearn.decomposition import PCA
@@ -66,7 +66,7 @@ def C2_helper(subject_path, ti):
         dir = chooseDirectory(visited, subject_path)
         person_imgs = os.listdir(dir)
         for img_path in person_imgs:
-            if img_path.endswith(".tif") and "fa" in img_path:
+            if img_path.endswith(".tif"):
                 tj = get_image(dir + "/" + img_path)
                 vectors.append(ti - tj)
     return vectors
@@ -75,7 +75,7 @@ def C2_helper(subject_path, ti):
 def generate_C2(subject_path):
     vectors = []
     for file in os.listdir(subject_path):
-        if file.endswith(".tif") and "fa" in file:
+        if file.endswith(".tif"):
             ti = get_image(subject_path + "/" + file)
             vectors += C2_helper(subject_path, ti)
     return vectors
@@ -156,24 +156,16 @@ def save_obj(obj, path):
 
 if __name__ == "__main__":
     basePath = "colorferet/dvd2/"
+    individuals = utils.get_train_test_subjects(basePath)
     """
-    Train SVMs
-    
+    Train SVMs and KNN - PCAs
+    """
     for cd in [1, 2]:
-        for dir in os.listdir(basePath + f"gray_feret_cd{cd}/data/images"):
+        for dir in individuals:
             print("Training on {}".format(dir))
-            single_svm = train_svm(basePath + f"gray_feret_cd{cd}/data/images/" + dir)
-            save_svm(single_svm, "svms/" + dir)
+            single_svm = train_svm(dir)
+            save_obj(single_svm, "svms/" + dir.split("/")[-1])
             del single_svm
-    """
-    """
-    Train KNN - PCAs
-    """
-    for cd in [1, 2]:
-        for dir in os.listdir(basePath + f"gray_feret_cd{cd}/data/images"):
-            print("Training on {}".format(dir))
-            single_knn_pca = train_knn_pca(
-                basePath + f"gray_feret_cd{cd}/data/images/" + dir
-            )
-            save_obj(single_knn_pca, "knn_pcas/" + dir)
+            single_knn_pca = train_knn_pca(dir)
+            save_obj(single_knn_pca, "knn_pcas/" + dir.split("/")[-1])
             del single_knn_pca

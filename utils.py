@@ -1,4 +1,5 @@
 import os
+import json
 
 
 def get_train_test_subjects(basePath):
@@ -28,4 +29,12 @@ def get_train_test_subjects(basePath):
     return individuals[:10]
 
 
-print(get_train_test_subjects("colorferet/dvd2/"))
+def score(y_real, y_pred):
+    p_v = 0
+    p_f = 0
+    for y_r, y_p in zip(y_real, y_pred):
+        if y_r == 1 and y_p == 1:
+            p_v += 1
+        if y_r == 1 and y_p == 0:
+            p_f += 1
+    return p_v / len(y_real), p_f / len(y_pred)

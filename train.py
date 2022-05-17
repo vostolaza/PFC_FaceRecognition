@@ -1,3 +1,4 @@
+from email.mime import base
 import numpy as np
 import random as rd
 import pandas as pd
@@ -5,6 +6,7 @@ import os
 import time
 import pickle
 import utils
+import json
 from imageio import imread
 from sklearn import svm
 from sklearn.decomposition import PCA
@@ -108,12 +110,17 @@ def generate_dataset(path):
     return X, y
 
 
+def gaussian_kernel(x1, x2):
+    sigma = 0.5
+    return np.exp(-np.sum((x1 - x2) ** 2) / (2 * sigma**2))
+
+
 def train_svm(path):
     """
     path: directory with photos of a single subject
     """
     X, y = generate_dataset(path)
-    clf = svm.SVC(kernel="linear", C=1)
+    clf = svm.SVC(kernel="gaussian_kernel", C=1)
     print("Fitting...")
     start = time.time()
     clf.fit(X, y)
@@ -129,7 +136,7 @@ def train_knn_pca(path):
     scaler.fit(X)
     X = scaler.transform(X)
 
-    pca = PCA(0.95)  # mantener 95% de varianza en el dataset, pca elige el n_components
+    pca = PCA(0.95)
     pca.fit(X)
     X = pca.transform(X)
     # ya se redujo la dimensionalidad
@@ -138,14 +145,50 @@ def train_knn_pca(path):
     return knn
 
 
-def predict(ID, photo):
-    with open("svms/" + ID + ".pkl", "rb") as f:
-        svm = pickle.load(f)
-    photo = get_image(photo)
-    photo = photo.reshape(1, -1)
-    y_pred = svm.predict(photo)
+def predict():
+    PV = 0
+    PF = 0
+    for dir in os.listdir("test_set/"):
+        basePath = "colorferet/dvd2/gray_feret_cd"
+        basePath += "1" if int(dir) <= 699 else "2"
+        basePath += "/data/images/" + dir + "/"
+        X = []
+        y = []
+        for file in os.listdir("test_set/" + dir):
+            vectors = []
+            ti = get_image("test_set/" + dir + "/" + file)
+            for file2 in os.listdir(basePath):
+                tj = get_image(basePath + "/" + file2)
+                vectors.append(ti - tj)
+            X += vectors
+            if dir in file:
+                y += [1] * len(vectors)
+            else:
+                y += [0] * len(vectors)
+        X = np.array(X)
+        X = X.reshape(len(X), -1)
+        y = np.array(y)
+        print(dir, "PV", "PF", sep="\t")
+        with open("svms/" + dir + ".pkl", "rb") as f:
+            svm = pickle.load(f)
+            y_pred = svm.predict(X)
+            svm_pv, svm_pf = utils.score(y, y_pred)
+            print("SVM:", svm_pv, svm_pf, sep="\t")
+            PV += svm_pv
+            PF += svm_pf
+        scaler = StandardScaler()
+        scaler.fit(X)
+        X = scaler.transform(X)
+        pca = PCA(n_components=11)
+        pca.fit(X)
+        X = pca.transform(X)
+        with open("knn_pcas/" + dir + ".pkl", "rb") as f:
+            knn_pca = pickle.load(f)
+            y_pred = knn_pca.predict(X)
+            knn_pca_pv, knn_pca_pf = utils.score(y, y_pred)
+            print("SVM:", knn_pca_pv, knn_pca_pf, sep="\t")
 
-    return y_pred
+    print("MEAN", PV / len(y_pred), PF / len(y_pred))
 
 
 def save_obj(obj, path):
@@ -156,16 +199,19 @@ def save_obj(obj, path):
 
 if __name__ == "__main__":
     basePath = "colorferet/dvd2/"
-    individuals = utils.get_train_test_subjects(basePath)
+    # individuals = utils.get_train_test_subjects(basePath)
+    with open("train_subjects.json") as f:
+        individuals = json.load(f)
     """
     Train SVMs and KNN - PCAs
     """
-    for cd in [1, 2]:
-        for dir in individuals:
-            print("Training on {}".format(dir))
-            single_svm = train_svm(dir)
-            save_obj(single_svm, "svms/" + dir.split("/")[-1])
-            del single_svm
-            single_knn_pca = train_knn_pca(dir)
-            save_obj(single_knn_pca, "knn_pcas/" + dir.split("/")[-1])
-            del single_knn_pca
+    """
+    for dir in individuals:
+        print("Training on {}".format(dir))
+        single_svm = train_svm(dir)
+        save_obj(single_svm, "svms/" + dir.split("/")[-1])
+        del single_svm
+        single_knn_pca = train_knn_pca(dir)
+        save_obj(single_knn_pca, "knn_pcas/" + dir.split("/")[-1])
+        del single_knn_pca
+    """

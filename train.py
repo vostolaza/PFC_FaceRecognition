@@ -1,7 +1,6 @@
 from email.mime import base
 import numpy as np
 import random as rd
-import pandas as pd
 import os
 import time
 import pickle
@@ -10,11 +9,11 @@ import json
 from imageio import imread
 from sklearn import svm
 from sklearn.decomposition import PCA
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import KNeighborsClassifier
 
 N_SAMPLES = 10
+PCA_N_COMPONENTS=50
 
 
 def get_image(path):
@@ -109,19 +108,13 @@ def generate_dataset(path):
     y = np.array([1] * len(C1) + [0] * len(C2))
     return X, y
 
-
-def gaussian_kernel(x1, x2):
-    sigma = 0.5
-    return np.exp(-np.sum((x1 - x2) ** 2) / (2 * sigma**2))
-
-
-def train_svm(path):
+def train_svm(path, C=0.1, kernel='linear'):
     """
     path: directory with photos of a single subject
     """
     X, y = generate_dataset(path)
-    clf = svm.SVC(kernel="gaussian_kernel", C=1)
-    print("Fitting...")
+    clf = svm.SVC(kernel=kernel, C=C)
+    print("Fitting {} kernel...".format(kernel))
     start = time.time()
     clf.fit(X, y)
     end = time.time()
@@ -129,14 +122,13 @@ def train_svm(path):
 
     return clf
 
-
-def train_knn_pca(path):
+def train_knn_pca(path, n_components=PCA_N_COMPONENTS):
     X, y = generate_dataset(path)
     scaler = StandardScaler()
     scaler.fit(X)
     X = scaler.transform(X)
 
-    pca = PCA(0.95)
+    pca = PCA(n_components=n_components)
     pca.fit(X)
     X = pca.transform(X)
     # ya se redujo la dimensionalidad
@@ -145,7 +137,7 @@ def train_knn_pca(path):
     return knn
 
 
-def predict():
+def predict(pca_n_components=PCA_N_COMPONENTS):
     PV = 0
     PF = 0
     for dir in os.listdir("test_set/"):
@@ -179,7 +171,7 @@ def predict():
         scaler = StandardScaler()
         scaler.fit(X)
         X = scaler.transform(X)
-        pca = PCA(n_components=11)
+        pca = PCA(n_components=pca_n_components)
         pca.fit(X)
         X = pca.transform(X)
         with open("knn_pcas/" + dir + ".pkl", "rb") as f:
@@ -205,13 +197,11 @@ if __name__ == "__main__":
     """
     Train SVMs and KNN - PCAs
     """
-    """
     for dir in individuals:
         print("Training on {}".format(dir))
-        single_svm = train_svm(dir)
-        save_obj(single_svm, "svms/" + dir.split("/")[-1])
-        del single_svm
+        #single_svm = train_svm(dir)
+        #save_obj(single_svm, "svms/" + dir.split("/")[-1])
+        #del single_svm
         single_knn_pca = train_knn_pca(dir)
         save_obj(single_knn_pca, "knn_pcas/" + dir.split("/")[-1])
         del single_knn_pca
-    """

@@ -1,6 +1,7 @@
 import os
 import json
 
+IMAGE_PATH = 'images/'
 
 def get_train_test_subjects(basePath):
     id_len = {}

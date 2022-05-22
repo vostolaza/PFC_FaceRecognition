@@ -1,4 +1,6 @@
+import face_recognition
 from email.mime import base
+from utils import IMAGE_PATH
 import numpy as np
 import random as rd
 import os
@@ -6,29 +8,23 @@ import time
 import pickle
 import utils
 import json
-from imageio import imread
 from sklearn import svm
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import KNeighborsClassifier
 
 N_SAMPLES = 10
-PCA_N_COMPONENTS=50
+PCA_N_COMPONENTS=25
 
 
 def get_image(path):
-    return np.array(imread(path))
+    picture = face_recognition.load_image_file(path)
+    return face_recognition.face_encodings(picture)[0]
 
 
-def generate_C1(path):
+def generate_C1(set):
     vectors = []
-    for file in os.listdir(path):
-        if file.endswith(".tif"):
-            ti = get_image(path + "/" + file)
-            for file2 in os.listdir(path):
-                if file2 != file and file2.endswith(".tif"):
-                    tj = get_image(path + "/" + file2)
-                    vectors.append(ti - tj)
+    vectors.append(get_image(set[0]) - get_image(set[1]))
     return vectors
 
 
@@ -60,35 +56,30 @@ def chooseDirectory(vis, subject_path):
     return dir
 
 
-def C2_helper(subject_path, ti):
-    visited = set()
+def generate_C2(dir, set):
     vectors = []
-    for i in range(N_SAMPLES):
-        dir = chooseDirectory(visited, subject_path)
-        person_imgs = os.listdir(dir)
-        for img_path in person_imgs:
-            if img_path.endswith(".tif"):
-                tj = get_image(dir + "/" + img_path)
-                vectors.append(ti - tj)
+    for image in set:
+        face = get_image(image)
+        with open("train_set.json") as f:
+            individuals = json.load(f)
+        count = 0
+        for train_dir, set_dir in individuals.items():
+            if count > N_SAMPLES: break
+            if train_dir == dir:
+                continue
+            for img in set_dir:
+                vectors.append(face - get_image(img))
+                count += 1
     return vectors
 
 
-def generate_C2(subject_path):
-    vectors = []
-    for file in os.listdir(subject_path):
-        if file.endswith(".tif"):
-            ti = get_image(subject_path + "/" + file)
-            vectors += C2_helper(subject_path, ti)
-    return vectors
-
-
-def generate_dataset(path):
+def generate_dataset(dir, set):
     print("Generating C1...")
     start = time.time()
     """ 
     C1: difference space for photos of the same subject
     """
-    C1 = generate_C1(path)
+    C1 = generate_C1(set)
     end = time.time()
     print("Generated C1 in {} seconds".format(end - start))
 
@@ -97,7 +88,7 @@ def generate_dataset(path):
     """
     C2: difference space for photos of the subject vs the other subjects
     """
-    C2 = generate_C2(path)
+    C2 = generate_C2(dir, set)
     end = time.time()
     print("Generated C2 in {} seconds".format(end - start))
 
@@ -108,11 +99,11 @@ def generate_dataset(path):
     y = np.array([1] * len(C1) + [0] * len(C2))
     return X, y
 
-def train_svm(path, C=0.1, kernel='linear'):
+def train_svm(dir, set, C=0.1, kernel='linear'):
     """
     path: directory with photos of a single subject
     """
-    X, y = generate_dataset(path)
+    X, y = generate_dataset(dir, set)
     clf = svm.SVC(kernel=kernel, C=C)
     print("Fitting {} kernel...".format(kernel))
     start = time.time()
@@ -122,8 +113,8 @@ def train_svm(path, C=0.1, kernel='linear'):
 
     return clf
 
-def train_knn_pca(path, n_components=PCA_N_COMPONENTS):
-    X, y = generate_dataset(path)
+def train_knn_pca(dir, set, n_components=PCA_N_COMPONENTS):
+    X, y = generate_dataset(dir, set)
     scaler = StandardScaler()
     scaler.fit(X)
     X = scaler.transform(X)
@@ -140,23 +131,21 @@ def train_knn_pca(path, n_components=PCA_N_COMPONENTS):
 def predict(pca_n_components=PCA_N_COMPONENTS):
     PV = 0
     PF = 0
-    for dir in os.listdir("test_set/"):
-        basePath = "colorferet/dvd2/gray_feret_cd"
-        basePath += "1" if int(dir) <= 699 else "2"
-        basePath += "/data/images/" + dir + "/"
+    with open("test_set.json") as f:
+        individuals = json.load(f)
+    for dir, set in individuals.items():
         X = []
         y = []
-        for file in os.listdir("test_set/" + dir):
-            vectors = []
-            ti = get_image("test_set/" + dir + "/" + file)
-            for file2 in os.listdir(basePath):
-                tj = get_image(basePath + "/" + file2)
-                vectors.append(ti - tj)
-            X += vectors
-            if dir in file:
-                y += [1] * len(vectors)
-            else:
-                y += [0] * len(vectors)
+        
+        X += [get_image(set[0]) - get_image(set[1])]
+        y += [1]
+
+        for newDir, newSet in individuals.items():
+            if newDir == dir:
+                continue
+            X += [get_image(set[0]) - get_image(newSet[0])]
+            y += [0]
+            break
         X = np.array(X)
         X = X.reshape(len(X), -1)
         y = np.array(y)
@@ -190,18 +179,17 @@ def save_obj(obj, path):
 
 
 if __name__ == "__main__":
-    basePath = "colorferet/dvd2/"
-    # individuals = utils.get_train_test_subjects(basePath)
-    with open("train_subjects.json") as f:
+    with open("train_set.json") as f:
         individuals = json.load(f)
     """
     Train SVMs and KNN - PCAs
     """
-    for dir in individuals:
-        print("Training on {}".format(dir))
-        #single_svm = train_svm(dir)
-        #save_obj(single_svm, "svms/" + dir.split("/")[-1])
-        #del single_svm
-        single_knn_pca = train_knn_pca(dir)
-        save_obj(single_knn_pca, "knn_pcas/" + dir.split("/")[-1])
-        del single_knn_pca
+    # for dir, set in individuals.items():
+    #     print("Training on {}".format(dir))
+    #     single_svm = train_svm(dir, set)
+    #     save_obj(single_svm, "svms/" + dir.split("/")[-1])
+    #     del single_svm
+    #     single_knn_pca = train_knn_pca(dir, set)
+    #     save_obj(single_knn_pca, "knn_pcas/" + dir.split("/")[-1])
+    #     del single_knn_pca
+    predict()

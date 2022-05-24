@@ -1,8 +1,4 @@
-import json
-with open("train_set.json") as f:
-        individuals = json.load(f)
+l = [1,2,3,4]
+l2 = [5,6,7,8]
 
-for dir, set in individuals.items():
-    print(dir)
-    print(set)
-    break
+print([*l, *l2])

@@ -15,7 +15,7 @@ from sklearn.neighbors import KNeighborsClassifier
 
 N_SAMPLES = 10
 PCA_N_COMPONENTS=25
-
+N_NEIGHBORS=10
 
 def get_image(path):
     picture = face_recognition.load_image_file(path)
@@ -23,54 +23,26 @@ def get_image(path):
 
 
 def generate_C1(set):
-    vectors = []
-    vectors.append(get_image(set[0]) - get_image(set[1]))
-    return vectors
+    return get_image(set[0]) - get_image(set[1])
 
+def generate_C2(set):
+    return get_image(set[0]) - get_image(set[2])
 
-def chooseDirectory(vis, subject_path):
-    subject_id = int(subject_path.split("/")[-1])
-
-    base_path = "/".join(subject_path.split("/")[:-4])
-    idx = None
-    while True:
-        idx = rd.randint(1, 1209)
-        if idx in vis or idx == subject_id:
-            continue
-        p = base_path + (
-            "/gray_feret_cd1/data/images/"
-            if idx < 700
-            else "/gray_feret_cd2/data/images/"
-        )
-        p += str(idx).zfill(5)
-
-        if not os.path.exists(p):
-            continue
-        break
-
-    vis.add(idx)
-    dir = base_path + (
-        "/gray_feret_cd1/data/images/" if idx < 700 else "/gray_feret_cd2/data/images/"
-    )
-    dir += str(idx).zfill(5)
-    return dir
-
-
-def generate_C2(dir, set):
-    vectors = []
-    for image in set:
-        face = get_image(image)
-        with open("train_set.json") as f:
-            individuals = json.load(f)
-        count = 0
-        for train_dir, set_dir in individuals.items():
-            if count > N_SAMPLES: break
-            if train_dir == dir:
-                continue
-            for img in set_dir:
-                vectors.append(face - get_image(img))
-                count += 1
-    return vectors
+# def generate_C2(dir, set):
+#     vectors = []
+#     for image in set:
+#         face = get_image(image)
+#         with open("train_set.json") as f:
+#             individuals = json.load(f)
+#         count = 0
+#         for train_dir, set_dir in individuals.items():
+#             if count > N_SAMPLES: break
+#             if train_dir == dir:
+#                 continue
+#             for img in set_dir:
+#                 vectors.append(face - get_image(img))
+#                 count += 1
+#     return vectors
 
 
 def generate_dataset(dir, set):
@@ -113,7 +85,7 @@ def train_svm(dir, set, C=0.1, kernel='linear'):
 
     return clf
 
-def train_knn_pca(dir, set, n_components=PCA_N_COMPONENTS):
+def train_knn_pca(dir, set, n_components=PCA_N_COMPONENTS,k=N_NEIGHBORS):
     X, y = generate_dataset(dir, set)
     scaler = StandardScaler()
     scaler.fit(X)
@@ -123,10 +95,57 @@ def train_knn_pca(dir, set, n_components=PCA_N_COMPONENTS):
     pca.fit(X)
     X = pca.transform(X)
     # ya se redujo la dimensionalidad
-    knn = KNeighborsClassifier(n_neighbors=10)
+    knn = KNeighborsClassifier(n_neighbors=k)
     knn.fit(X, y)
     return knn
 
+def new_train_knn_pca(dir, set, n_components=PCA_N_COMPONENTS,k=N_NEIGHBORS):
+    with open("train_set.json") as f:
+        individuals = json.load(f)
+
+    C1 = []
+    C2 = []
+
+    for dir, set in individuals.items():
+        print("Generating C1 for {}...".format(dir))
+        C1.append(generate_C1(set))
+        print("Generating C2 for {}...".format(dir))
+        C2.append(generate_C2(set))
+    
+    X = [*C1, *C2]
+
+    scaler = StandardScaler()
+    scaler.fit(X)
+    X = scaler.transform(X)
+    pca = PCA(n_components=n_components)
+    pca.fit(X)
+    X = pca.transform(X)
+    knn = KNeighborsClassifier(n_neighbors=k)
+    knn.fit(X, [*[1 for individual in C1], *[0 for individual in C2]])
+    return knn
+
+def new_train_svm(kernel='linear', C=0.1):
+    with open("train_set.json") as f:
+        individuals = json.load(f)
+
+    C1 = []
+    C2 = []
+
+    for dir, set in individuals.items():
+        print("Generating C1 for {}...".format(dir))
+        C1.append(generate_C1(set))
+        print("Generating C2 for {}...".format(dir))
+        C2.append(generate_C2(set))
+
+    clf = svm.SVC(kernel=kernel, C=C)
+    
+    print(f"Fitting {kernel} kernel...")
+    start = time.time()
+    clf.fit([*C1, *C2], [*[1 for individual in C1], *[0 for individual in C2]])
+    end = time.time()
+    print("Fitted in {} seconds".format(end - start))
+    
+    return clf
 
 def predict(pca_n_components=PCA_N_COMPONENTS):
     PV = 0
@@ -192,4 +211,9 @@ if __name__ == "__main__":
     #     single_knn_pca = train_knn_pca(dir, set)
     #     save_obj(single_knn_pca, "knn_pcas/" + dir.split("/")[-1])
     #     del single_knn_pca
-    predict()
+    # predict()
+    clf = new_train_svm()
+    print(clf.predict(get_image("images/00215/00215fb010_940128.tif") - get_image("images/00215/00215fa010_940128.tif")))
+    print(clf.predict(get_image("images/00008/00008fb010_930831.tif") - get_image("images/00950/00950fb010_960627.tif")))
+    print(clf.predict(get_image("images/00940/00940fa010_960627.tif") - get_image("images/00940/00940fb010_960627.tif")))
+    print(clf.predict(get_image("images/00714/00714fb010_960530.tif") - get_image("images/00696/00696fb010_941121.tif")))

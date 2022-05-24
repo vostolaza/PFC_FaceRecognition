@@ -4,7 +4,7 @@ import json
 
 NSAMPLES = 100
 
-def generate_set(output_path):
+def generate_set(output_path, set):
     d = {}
     for i in range(NSAMPLES):
         set = []
@@ -12,6 +12,7 @@ def generate_set(output_path):
         while (len(set) < 2):
             idx = randint(0, 1209)
             if idx in d: continue
+            if idx in set: continue
             folder = 'images/' + str(idx).zfill(5)
             if not os.path.exists(folder): continue
             for img in os.listdir(folder):
@@ -33,8 +34,9 @@ def generate_set(output_path):
         d[final_idx] = set
     with open(output_path, 'w') as f:
         json.dump(d, f, indent=2)
-
+    return d
 
 if __name__ == "__main__":
-    generate_set('train_set.json')
-    generate_set('test_set.json')
+    x = {}
+    train = generate_set('train_set.json', x)
+    generate_set('test_set.json', train)
